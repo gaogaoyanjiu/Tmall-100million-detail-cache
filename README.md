@@ -1,0 +1,1 @@
+# Tmall-100million-detail-cache
