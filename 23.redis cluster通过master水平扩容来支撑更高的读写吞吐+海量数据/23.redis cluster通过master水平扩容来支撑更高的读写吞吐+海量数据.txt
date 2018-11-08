@@ -84,3 +84,22 @@ redis-trib.rb del-node 192.168.31.187:7001 bd5a40a6ddccbd46a0f4a2208eb25d2453c2a
 当你清空了一个master的hashslot时，redis cluster就会自动将其slave挂载到其他master上去
 
 这个时候就只要删除掉master就可以了
+
+
+===========================================================================================================================
+
+slave的自动迁移
+
+比如现在有10个master，每个有1个slave，然后新增了3个slave作为冗余，有的master就有2个slave了，有的master出现了salve冗余
+
+如果某个master的slave挂了，那么redis cluster会自动迁移一个冗余的slave给那个master
+
+只要多加一些冗余的slave就可以了
+
+为了避免的场景，就是说，如果你每个master只有一个slave，万一说一个slave死了，然后很快，master也死了，那可用性还是降低了
+
+但是如果你给整个集群挂载了一些冗余slave，那么某个master的slave死了，冗余的slave会被自动迁移过去，作为master的新slave，此时即使那个master也死了
+
+还是有一个slave会切换成master的
+
+之前有一个master是有冗余slave的，直接让其他master其中的一个slave死掉，然后看有冗余slave会不会自动挂载到那个master
