@@ -46,7 +46,7 @@ resharding的意思就是把一部分hash slot从一些node上迁移到另外一
 
 redis-trib.rb reshard 192.168.31.187:7001
 
-要把之前3个master上，总共4096个hashslot迁移到新的第四个master上去
+要把之前3个master上，总共4096个hashslot迁移到新的第四个master上去， done 执行
 
 How many slots do you want to move (from 1 to 16384)?
 
@@ -70,6 +70,8 @@ bind 192.168.31.227
 appendonly yes
 
 redis-trib.rb add-node --slave --master-id 28927912ea0d59f6b790a50cf606602a5ee48108 192.168.31.227:7008 192.168.31.187:7001
+
+
 
 4、删除node
 
