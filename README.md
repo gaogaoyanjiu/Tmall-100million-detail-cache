@@ -1,5 +1,7 @@
 # Tmall-100million-detail-cache
 
+https://book.itxueyuan.com/rqax/pxeR
+
 
 真正能支撑高并发以及高可用的复杂系统中的缓存架构有哪些东西？
 
