@@ -1,0 +1,327 @@
+后面写的各种代码，还是要基于mysql去做一些开发的，因为缓存的底层的数据存储肯定是数据库
+
+mysql数据库，还是要部署一下的
+
+eshop-cache04
+
+先用yum安装mysql server
+
+yum install -y mysql-server
+
+service mysqld start
+chkconfig mysqld on
+
+yum install -y mysql-connector-java
+
+
+>mysql
+
+
+=================================================================================================================================
+
+
+
+1、pom.xml
+
+maven下载这些依赖的时候，会非常非常的慢，根据不同人的网络环境，也不一样
+
+你就在eclipse里面，观察每个依赖的下载的情况
+
+如果说觉得下载的很慢，就是卡在一个地方，好长时间不能下载，进度条都不动了
+
+那就手动下载maven依赖，mysql connector java maven，进到maven中央依赖库里面，去手动下载对应版本的jar包，可以用迅雷，会比较快速一些
+
+你需要手动将jar包拷贝到你本地的maven仓库的对应的目录中去
+
+可能对应的目录不存在，那就自己手动创建; 可能对应的目录已经存在，那么需要你将里面的东西先删除，然后拷贝自己下载的jar包进去
+
+然后需要执行mvn install命令，手动安装依赖
+
+mvn install:install-file -Dfile=F:\apache-maven-3.0.5\mvn_repo\redis\clients\jedis\2.5.2\jedis-2.5.2.jar -DgroupId=redis.clients -DartifactId=jedis -Dversion=2.5.2 -Dpackaging=jar
+
+可能需要将eclipse强制关闭，任务管理器里面，直接强制结束任务，关闭eclipse，重新打开
+
+右击工程，强制重新更新maven的依赖
+
+然后就会继续去下载接下来的依赖包
+
+我大概手动下载了将近10个依赖，然后才顺利的下载完了所有的依赖
+
+	<parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>1.2.5.RELEASE</version>
+    </parent>
+
+    <properties>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <java.version>1.8</java.version>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-thymeleaf</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.mybatis</groupId>
+            <artifactId>mybatis-spring</artifactId>
+            <version>1.2.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.mybatis</groupId>
+            <artifactId>mybatis</artifactId>
+            <version>3.2.8</version>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.tomcat</groupId>
+            <artifactId>tomcat-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>mysql</groupId>
+            <artifactId>mysql-connector-java</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>fastjson</artifactId>
+            <version>1.1.43</version>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+
+    <repositories>
+        <repository>
+            <id>spring-milestone</id>
+            <url>https://repo.spring.io/libs-release</url>
+        </repository>
+    </repositories>
+
+    <pluginRepositories>
+        <pluginRepository>
+            <id>spring-milestone</id>
+            <url>https://repo.spring.io/libs-release</url>
+        </pluginRepository>
+    </pluginRepositories>
+
+2、com.roncoo.eshop.inventory.Application
+
+我们是直接讲解项目的，项目中遇到的一些技术，比如说redis，是缓存架构topic里面非常重要的一个环节，那我们当然会花费很大的篇幅去仔细讲解
+
+但是比如spring boot、mybatis、zookeeper、storm
+
+有些技术，是默认大家要会的，spring boot，mybatis，你说你都不会，不行，自己去学一下
+
+zookeeper，kafka，技术，直接带着大家部署，简单介绍一下，就开始用了，如果真的是要用这个技术，做项目，还是得上网自己去查阅一些资料，学习这个技术
+
+storm，会带着大家把20%的核心基础知识学习一下，作为java程序员，可以开发就行了
+
+一个项目课程，涉及了十几种技术，我不可能全都给你按照从入门到精通的方式，全部讲解一遍
+
+
+===============================================================启动类==================================================================
+
+@EnableAutoConfiguration
+@SpringBootApplication
+@ComponentScan
+@MapperScan("com.roncoo.eshop.inventory.mapper")
+public class Application {
+ 
+    @Bean
+    @ConfigurationProperties(prefix="spring.datasource")
+    public DataSource dataSource() {
+        return new org.apache.tomcat.jdbc.pool.DataSource();
+    }
+    
+    @Bean
+    public SqlSessionFactory sqlSessionFactoryBean() throws Exception {
+        SqlSessionFactoryBean sqlSessionFactoryBean = new SqlSessionFactoryBean();
+        sqlSessionFactoryBean.setDataSource(dataSource());
+        PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
+        sqlSessionFactoryBean.setMapperLocations(resolver.getResources("classpath:/mybatis/*.xml"));
+        return sqlSessionFactoryBean.getObject();
+    }
+ 
+    @Bean
+    public PlatformTransactionManager transactionManager() {
+        return new DataSourceTransactionManager(dataSource());
+    }
+
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+ 
+}
+
+
+===============================================================实体类==================================================================
+3、com.roncoo.eshop.inventory.model.User
+
+
+
+
+===============================================================Mapper接口类==================================================================
+4、com.roncoo.eshop.inventory.mapper.UserMapper
+
+public interface UserMapper {
+    public User findUserInfo();
+}
+
+
+===============================================================service接口类==================================================================
+5、com.roncoo.eshop.inventory.service.UserService
+
+
+
+===============================================================Controller 类==================================================================
+
+6、UserController
+
+@Controller
+public class UserController {
+ 
+    @Autowired
+    private UserService userService;
+ 
+    @RequestMapping("/getUserInfo")
+    @ResponseBody
+    public User getUserInfo() {
+        User user = userService.getUserInfo();
+        return user;
+    }
+
+}
+
+
+===============================================================properties 数据库配置文件 ==================================================================
+
+
+7、src/main/resources/Application.properties
+
+spring.datasource.url=jdbc:mysql://127.0.0.1:3306/test
+spring.datasource.username=root
+spring.datasource.password=root
+spring.datasource.driver-class-name=com.mysql.jdbc.Driver
+
+
+===============================================================UserMapper.xml文件 ==================================================================
+
+8、src/main/resources/mybatis/UserMapper.xml
+
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.roncoo.eshop.inventory.mapper.UserMapper">
+ 
+  <select id="findUserInfo" resultType="com.roncoo.eshop.inventory.model.User">
+	select name,age from user;
+  </select>
+ 
+</mapper>
+
+
+
+===============================================================测试spring boot+mybatis的整合 ==================================================================
+
+
+9、测试spring boot+mybatis的整合
+
+在数据库中创建一个数据库 eshop database，创建一个eshop账号和密码，创建一个user表，里面插入一条数据，张三和25岁
+
+创建数据库eshop：
+create database if not exists eshop;
+创建用户名和密码：
+grant all privileges on eshop.* to 'eshop'@'%' identified by 'eshop';
+创建表：
+create table user(name varchar(255), age int);
+插入数据：
+insert into user values('张三', 25);
+
+
+
+启动Application程序，访问getUserInfo接口，能否从mysql中查询数据，并返回到页面上
+
+如果可以，说明spring boot+mybatis整合成功
+
+
+===============================================================整合Jedis Cluster ==================================================================
+
+
+10、整合Jedis Cluster
+
+<dependency>
+    <groupId>redis.clients</groupId>
+    <artifactId>jedis</artifactId>
+</dependency>
+
+Application
+
+@Bean
+public JedisCluster JedisClusterFactory() {
+    Set<HostAndPort> jedisClusterNodes = new HashSet<HostAndPort>();
+    jedisClusterNodes.add(new HostAndPort("192.168.31.19", 7003));
+    jedisClusterNodes.add(new HostAndPort("192.168.31.19", 7004));
+    jedisClusterNodes.add(new HostAndPort("192.168.31.227", 7006));
+    JedisCluster jedisCluster = new JedisCluster(jedisClusterNodes);
+    return jedisCluster;
+}
+
+@Repository("redisDAO")   
+public class RedisDAOImpl implements RedisDAO {
+
+    @Resource
+    private JedisCluster jedisCluster;
+    
+    @Override
+    public void set(String key, String value) {
+        jedisCluster.set(key, value);
+    }
+
+    @Override
+    public String get(String key) {
+        return jedisCluster.get(key);
+    }
+
+}
+
+UserServiceImpl
+
+@Override
+public User getCachedUserInfo() {
+    redisDAO.set("cached_user", "{\"name\": \"zhangsan\", \"age\": 25}") ;  
+    String json = redisDAO.get("cached_user");  
+    JSONObject jsonObject = JSONObject.parseObject(json);
+    
+    User user = new User();
+    user.setName(jsonObject.getString("name"));  
+    user.setAge(jsonObject.getInteger("age")); 
+    
+    return user;
+}
+
+UserController
+
+@RequestMapping("/getCachedUserInfo")
+@ResponseBody
+public User getCachedUserInfo() {
+    User user = userService.getCachedUserInfo();
+    return user;
+}
