@@ -1,0 +1,196 @@
+
+多级缓存的架构
+
+主要是用来解决什么样的数据的缓存的更新的啊？？？
+
+时效性不高的数据，比如一些商品的基本信息，如果发生了变更，假设在5分钟之后再更新到页面中，供用户观察到，也是ok的
+
+时效性要求不高的数据，那么我们采取的是异步更新缓存的策略
+
+时效性要求很高的数据，库存，采取的是数据库+缓存双写的技术方案，也解决了双写的一致性的问题
+
+缓存数据生产服务，监听一个消息队列，然后数据源服务（商品信息管理服务）发生了数据变更之后，就将数据变更的消息推送到消息队列中
+
+缓存数据生产服务可以去消费到这个数据变更的消息，然后根据消息的指示提取一些参数，然后调用对应的数据源服务的接口，拉去数据，这个时候一般是从mysql库中拉去的
+
+消息队列是什么东西？采取打的就是kafka
+
+我工作的时候，很多项目是跟大数据相关的，当然也有很多是纯java系统的架构，最近用kafka用得比较多
+
+kafka比较简单易用，讲课来说，很方便
+
+解释一下，我们当然是不可能对课程中涉及的各种技术都深入浅出的讲解的了，kafka，花上20个小时给你讲解一下，不可能的
+
+所以说呢，在这里，一些技术的组合，用什么都ok
+
+笑傲江湖中的风清扬，手中无剑胜有剑，还有任何东西都可以当做兵器，哪怕是一根草也可以
+
+搞技术，kafka和activemq肯定有区别，但是说，在有些场景下，其实可能没有那么大的区分度，kafka和activemq其实是一样的
+
+生产者+消费者的场景，kafka+activemq都ok
+
+涉及的这种架构，对时效性要求高和时效性要求低的数据，分别采取什么技术方案？数据库+缓存双写一致性？异步+多级缓存架构？大缓存的维度化拆分？
+
+你要关注的，是一些架构上的东西和思想，而不是具体的什么mq的使用
+
+activemq的课程，书籍，资料
+
+kafka集群，zookeeper集群，先搭建zookeeper集群，再搭建kafka集群
+
+kafka另外一个原因：kafka，本来就要搭建zookeeper，zookeeper这个东西，后面我们还要用呢，缓存的分布式并发更新的问题，分布式锁解决
+
+zookeeper + kafka的集群，都是三节点
+
+java高级工程师的思想，在干活儿，在思考，jvm，宏观的思考，通盘去考虑整个架构，还有未来的技术规划，业务的发展方向，架构的演进方向和路线
+
+把课程里讲解的各种技术方案组合成、修改成你需要的适合你的业务的缓存架构
+
+
+====================================================================================================================================
+
+1、zookeeper集群搭建
+
+将课程提供的zookeeper-3.4.5.tar.gz使用CRT拷贝到/usr/local目录下。
+对zookeeper-3.4.5.tar.gz进行解压缩：tar -zxvf zookeeper-3.4.5.tar.gz
+对zookeeper目录进行重命名：mv zookeeper-3.4.5 zk
+
+配置zookeeper相关的环境变量
+vi ~/.bashrc
+export ZOOKEEPER_HOME=/usr/local/zk
+export PATH=$ZOOKEEPER_HOME/bin
+source ~/.bashrc
+
+cd zk/conf
+cp zoo_sample.cfg zoo.cfg
+
+vi zoo.cfg
+修改：dataDir=/usr/local/zk/data
+新增：
+server.0=eshop-cache01:2888:3888	
+server.1=eshop-cache02:2888:3888
+server.2=eshop-cache03:2888:3888
+
+cd zk
+mkdir data
+cd data
+
+vi myid
+0
+
+在另外两个节点上按照上述步骤配置ZooKeeper，使用scp将zk和.bashrc拷贝到eshop-cache02和eshop-cache03上即可。唯一的区别是标识号分别设置为1和2。
+
+scp ~/.bashrc root@eshop-cache02:~/
+scp ~/.bashrc root@eshop-cache03:~/
+
+scp -r zk root@eshop-cache02:/usr/local/
+scp -r zk root@eshop-cache03:/usr/local/
+
+cat ~/.bashrc
+
+source ~/.bashrc
+
+vi myid
+1
+
+vi myid
+2
+
+分别在三台机器上执行：zkServer.sh start
+检查ZooKeeper状态：zkServer.sh status，应该是一个leader，两个follower
+jps：检查三个节点是否都有QuromPeerMain进程
+
+
+
+====================================================================================================================================
+
+2、kafka集群搭建
+
+scala，我就不想多说了，就是一门编程语言，现在比较火，很多比如大数据领域里面的spark（计算引擎）就是用scala编写的
+
+将课程提供的scala-2.11.4.tgz使用WinSCP拷贝到/usr/local目录下
+对scala-2.11.4.tgz进行解压缩：tar -zxvf scala-2.11.4.tgz
+对scala目录进行重命名：mv scala-2.11.4 scala
+
+配置scala相关的环境变量
+vi ~/.bashrc
+export SCALA_HOME=/usr/local/scala
+export PATH=$SCALA_HOME/bin
+source ~/.bashrc
+
+查看scala是否安装成功：scala -version
+
+按照上述步骤在其他机器上都安装好scala。使用scp将scala和.bashrc拷贝到另外两台机器上即可。
+scp ~/.bashrc root@eshop-cache02:~/
+scp ~/.bashrc root@eshop-cache03:~/
+
+scp -r scala root@eshop-cache02:/usr/local/
+scp -r scala root@eshop-cache03:/usr/local/
+
+cat ~/.bashrc
+
+source ~/.bashrc
+
+
+将课程提供的kafka_2.9.2-0.8.1.tgz使用WinSCP拷贝到/usr/local目录下
+对kafka_2.9.2-0.8.1.tgz进行解压缩：tar -zxvf kafka_2.9.2-0.8.1.tgz
+对kafka目录进行改名：mv kafka_2.9.2-0.8.1 kafka
+
+配置kafka
+vi /usr/local/kafka/config/server.properties
+broker.id：依次增长的整数，0、1、2，集群中Broker的唯一id
+zookeeper.connect=192.168.31.187:2181,192.168.31.19:2181,192.168.31.227:2181
+
+自己测试用的
+zookeeper.connect=192.168.1.105:2181,192.168.1.106:2181,192.168.1.107:2181
+====================================================================================================================================
+
+3.安装slf4j
+将课程提供的slf4j-1.7.6.zip上传到/usr/local目录下
+unzip slf4j-1.7.6.zip
+把slf4j中的slf4j-nop-1.7.6.jar复制到kafka的libs目录下面
+
+解决kafka Unrecognized VM option 'UseCompressedOops'问题
+
+vi /usr/local/kafka/bin/kafka-run-class.sh 
+
+if [ -z "$KAFKA_JVM_PERFORMANCE_OPTS" ]; then
+  KAFKA_JVM_PERFORMANCE_OPTS="-server  -XX:+UseCompressedOops -XX:+UseParNewGC -XX:+UseConcMarkSweepGC -XX:+CMSClassUnloadingEnabled -XX:+CMSScavengeBeforeRemark -XX:+DisableExplicitGC -Djava.awt.headless=true"
+fi
+
+去掉-XX:+UseCompressedOops即可
+
+按照上述步骤在另外两台机器分别安装kafka。用scp把kafka拷贝到其他机器即可。
+scp -r kafka root@eshop-cache02:/usr/local/
+scp -r kafka root@eshop-cache03:/usr/local/
+
+唯一区别的，就是server.properties中的broker.id，要设置为1和2
+
+vi /usr/local/kafka/config/server.properties
+
+在三台机器上的kafka目录下，分别执行以下命令：nohup bin/kafka-server-start.sh config/server.properties &
+
+查看启动日志
+cat nohup.out 
+
+使用jps检查启动是否成功
+
+使用基本命令检查kafka是否搭建成功
+
+消息生产和消费测试：
+1、创建topic主题
+bin/kafka-topics.sh --zookeeper 192.168.31.187:2181,192.168.31.19:2181,192.168.31.227:2181 --topic test --replication-factor 1 --partitions 1 --create
+
+2、生产者发送消息
+bin/kafka-console-producer.sh --broker-list 192.168.31.181:9092,192.168.31.19:9092,192.168.31.227:9092 --topic test
+
+3、消费者消费消息
+bin/kafka-console-consumer.sh --zookeeper 192.168.31.187:2181,192.168.31.19:2181,192.168.31.227:2181 --topic test --from-beginning
+
+====================================================================================================================================
+
+自己测试用的
+bin/kafka-topics.sh --zookeeper 192.168.1.105:2181,192.168.1.106:2181,192.168.1.107:2181 --topic test --replication-factor 1 --partitions 1 --create
+
+bin/kafka-console-producer.sh --broker-list 192.168.1.105:9092,192.168.1.106:9092,192.168.1.107:9092 --topic test
+
+bin/kafka-console-consumer.sh --zookeeper 192.168.1.105:2181,192.168.1.106:2181,192.168.1.107:2181 --topic test --from-beginning

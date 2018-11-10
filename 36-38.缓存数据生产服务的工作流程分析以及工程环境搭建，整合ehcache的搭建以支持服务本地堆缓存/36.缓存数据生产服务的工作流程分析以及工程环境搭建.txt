@@ -1,0 +1,169 @@
+
+接下来要做这个多级缓存架构，从底往上做，先做缓存数据的生产这一块
+
+我们画图来简单介绍一下整个缓存数据生产服务的一个工作流程
+
+1、商品详情页缓存数据生产服务的工作流程分析
+
+（1）监听多个kafka topic，每个kafka topic对应一个服务（简化一下，监听一个kafka topic）
+（2）如果一个服务发生了数据变更，那么就发送一个消息到kafka topic中
+（3）缓存数据生产服务监听到了消息以后，就发送请求到对应的服务中调用接口以及拉取数据，此时是从mysql中查询的
+（4）缓存数据生产服务拉取到了数据之后，会将数据在本地缓存中写入一份，就是ehcache中
+（5）同时会将数据在redis中写入一份
+
+2、spring boot+mybatis+redis框架整合搭建
+
+=======================================================================================================================================
+
+（1）依赖
+
+<parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>1.2.5.RELEASE</version>
+</parent>
+
+<properties>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <java.version>1.8</java.version>
+</properties>
+
+<dependencies>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-thymeleaf</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-jdbc</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>org.mybatis</groupId>
+        <artifactId>mybatis-spring</artifactId>
+        <version>1.2.2</version>
+    </dependency>
+    <dependency>
+        <groupId>org.mybatis</groupId>
+        <artifactId>mybatis</artifactId>
+        <version>3.2.8</version>
+    </dependency>
+    <dependency>
+        <groupId>org.apache.tomcat</groupId>
+        <artifactId>tomcat-jdbc</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>mysql</groupId>
+        <artifactId>mysql-connector-java</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>com.alibaba</groupId>
+        <artifactId>fastjson</artifactId>
+        <version>1.1.43</version>
+    </dependency>
+</dependencies>
+
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-maven-plugin</artifactId>
+        </plugin>
+    </plugins>
+</build>
+
+<repositories>
+    <repository>
+        <id>spring-milestone</id>
+        <url>https://repo.spring.io/libs-release</url>
+    </repository>
+</repositories>
+
+<pluginRepositories>
+    <pluginRepository>
+        <id>spring-milestone</id>
+        <url>https://repo.spring.io/libs-release</url>
+    </pluginRepository>
+</pluginRepositories>
+
+=======================================================================================================================================
+
+（2）Application
+
+@EnableAutoConfiguration
+@SpringBootApplication
+@ComponentScan
+@MapperScan("com.roncoo.eshop.inventory.mapper")
+public class Application {
+ 
+    @Bean
+    @ConfigurationProperties(prefix="spring.datasource")
+    public DataSource dataSource() {
+        return new org.apache.tomcat.jdbc.pool.DataSource();
+    }
+    
+    @Bean
+    public SqlSessionFactory sqlSessionFactoryBean() throws Exception {
+        SqlSessionFactoryBean sqlSessionFactoryBean = new SqlSessionFactoryBean();
+        sqlSessionFactoryBean.setDataSource(dataSource());
+        PathMatchingResourcePatternResolver resolver = new PathMatchingResourcePatternResolver();
+        sqlSessionFactoryBean.setMapperLocations(resolver.getResources("classpath:/mybatis/*.xml"));
+        return sqlSessionFactoryBean.getObject();
+    }
+ 
+    @Bean
+    public PlatformTransactionManager transactionManager() {
+        return new DataSourceTransactionManager(dataSource());
+    }
+
+    public static void main(String[] args) {
+        SpringApplication.run(Application.class, args);
+    }
+ 
+}
+
+=======================================================================================================================================
+
+（3）resources/Application.properties
+
+spring.datasource.url=jdbc:mysql://127.0.0.1:3306/test
+spring.datasource.username=root
+spring.datasource.password=root
+spring.datasource.driver-class-name=com.mysql.jdbc.Driver
+
+=======================================================================================================================================
+
+（4）resources/mybatis
+
+=======================================================================================================================================
+
+（5）整合Jedis Cluster
+
+
+<dependency>
+    <groupId>redis.clients</groupId>
+    <artifactId>jedis</artifactId>
+</dependency>
+
+=======================================================================================================================================
+
+Application
+
+@Bean
+public JedisCluster JedisClusterFactory() {
+    Set<HostAndPort> jedisClusterNodes = new HashSet<HostAndPort>();
+    jedisClusterNodes.add(new HostAndPort("192.168.31.19", 7003));
+    jedisClusterNodes.add(new HostAndPort("192.168.31.19", 7004));
+    jedisClusterNodes.add(new HostAndPort("192.168.31.227", 7006));
+    JedisCluster jedisCluster = new JedisCluster(jedisClusterNodes);
+    return jedisCluster;
+}
+
+=======================================================================================================================================
