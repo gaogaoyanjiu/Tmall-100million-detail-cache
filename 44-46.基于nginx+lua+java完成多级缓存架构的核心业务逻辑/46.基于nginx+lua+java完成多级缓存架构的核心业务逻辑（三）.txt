@@ -1,0 +1,41 @@
+/usr/servers/nginx/sbin/nginx -s reload
+
+<html>
+        <head>
+                <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+                <title>商品详情页</title>
+        </head>
+<body>
+商品id: {* productId *}<br/>
+商品名称: {* productName *}<br/>
+商品图片列表: {* productPictureList *}<br/>
+商品规格: {* productSpecification *}<br/>
+商品售后服务: {* productService *}<br/>
+商品颜色: {* productColor *}<br/>
+商品大小: {* productSize *}<br/>
+店铺id: {* shopId *}<br/>
+店铺名称: {* shopName *}<br/>
+店铺等级: {* shopLevel *}<br/>
+店铺好评率: {* shopGoodCommentRate *}<br/>
+</body>
+</html>
+
+第一次访问的时候，其实在nginx本地缓存中是取不到的，所以会发送http请求到后端的缓存服务里去获取，会从redis中获取
+
+拿到数据以后，会放到nginx本地缓存里面去，过期时间是10分钟
+
+然后将所有数据渲染到模板中，返回模板
+
+以后再来访问的时候，就会直接从nginx本地缓存区获取数据了
+
+缓存数据生产 -> 有数据变更 -> 主动更新两级缓存（ehcache+redis）-> 缓存维度化拆分
+
+分发层nginx + 应用层nginx -> 自定义流量分发策略提高缓存命中率
+
+nginx shared dict缓存 -> 缓存服务 -> redis -> ehcache -> 渲染html模板 -> 返回页面
+
+还差最后一个很关键的要点，就是如果你的数据在nginx -> redis -> ehcache三级缓存都不在了，可能就是被LRU清理掉了
+
+这个时候缓存服务会重新拉去数据，去更新到ehcache和redis中，这里我们还没讲解
+
+分布式的缓存重建的并发问题

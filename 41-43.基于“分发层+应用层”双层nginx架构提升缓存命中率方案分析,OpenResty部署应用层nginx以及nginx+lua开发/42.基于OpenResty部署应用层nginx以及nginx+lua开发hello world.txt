@@ -1,0 +1,198 @@
+
+我们这里玩儿nginx，全都会在nginx里去写lua脚本，因为我们需要自定义一些特殊的业务逻辑
+
+比如说，流量分发，自己用lua去写分发的逻辑，在分发层nginx里去写的
+
+再比如说，要用lua去写多级缓存架构存取的控制逻辑，在应用层nginx里去写的
+
+后面还要做热点数据的自动降级机制，也是用lua脚本去写降级机制的，在分发层nginx里去写的
+
+因为我们要用nginx+lua去开发，所以会选择用最流行的开源方案，就是用OpenResty
+
+nginx+lua打包在一起，而且提供了包括redis客户端，mysql客户端，http客户端在内的大量的组件
+
+我们这一讲是去部署应用层nginx，会采用OpenResty的方式去部署nginx，而且会带着大家写一个nginx+lua开发的一个hello world
+
+====================================================================================================================================
+
+1、部署第一个nginx，作为应用层nginx（192.168.31.187那个机器上）
+
+（1）部署openresty
+
+mkdir -p /usr/servers  
+cd /usr/servers/
+
+yum install -y readline-devel pcre-devel openssl-devel gcc
+
+wget http://openresty.org/download/ngx_openresty-1.7.7.2.tar.gz  
+tar -xzvf ngx_openresty-1.7.7.2.tar.gz  
+cd /usr/servers/ngx_openresty-1.7.7.2/
+
+cd bundle/LuaJIT-2.1-20150120/  
+make clean && make && make install  
+ln -sf luajit-2.1.0-alpha /usr/local/bin/luajit
+
+cd bundle  
+wget https://github.com/FRiCKLE/ngx_cache_purge/archive/2.3.tar.gz  
+tar -xvf 2.3.tar.gz  
+
+cd bundle  
+wget https://github.com/yaoweibin/nginx_upstream_check_module/archive/v0.3.0.tar.gz  
+tar -xvf v0.3.0.tar.gz  
+
+cd /usr/servers/ngx_openresty-1.7.7.2  
+
+./configure --prefix=/usr/servers --with-http_realip_module  --with-pcre  --with-luajit --add-module=./bundle/ngx_cache_purge-2.3/ --add-module=./bundle/nginx_upstream_check_module-0.3.0/ -j2  
+
+make && make install 
+
+cd /usr/servers/  
+ll
+
+/usr/servers/luajit
+/usr/servers/lualib
+/usr/servers/nginx
+/usr/servers/nginx/sbin/nginx -V 
+
+启动nginx: /usr/servers/nginx/sbin/nginx
+
+
+====================================================================================================================================
+
+
+（2）nginx+lua开发的hello world
+
+vi /usr/servers/nginx/conf/nginx.conf
+
+1、在http部分添加：
+
+lua_package_path "/usr/servers/lualib/?.lua;;";  
+lua_package_cpath "/usr/servers/lualib/?.so;;";  
+
+2、在/usr/servers/nginx/conf下，创建一个lua.conf
+
+server {  
+    listen       80;  
+    server_name  _;  
+}  
+
+3、在nginx.conf的http部分添加：
+
+include lua.conf;
+
+4、验证配置是否正确：
+
+/usr/servers/nginx/sbin/nginx -t
+
+5、在lua.conf的server{}部分添加：
+
+location /lua {  
+    default_type 'text/html';  
+    content_by_lua 'ngx.say("hello world")';  
+} 
+
+/usr/servers/nginx/sbin/nginx -t  
+
+6、重新nginx加载配置
+
+/usr/servers/nginx/sbin/nginx -s reload  
+
+7、访问: http://192.168.1.105/lua
+
+
+
+8、规范写法
+
+* mkdir /usr/servers/nginx/conf/lua
+
+* vi /usr/servers/nginx/conf/lua/hello.lua
+
+ngx.say("hello world"); 
+
+* 修改lua.conf : vi /usr/servers/nginx/conf/lua.conf
+
+	location /lua {  
+		default_type 'text/html';  
+		content_by_lua_file conf/lua/hello.lua; 
+	}
+
+* 查看异常日志
+
+ tail -f /usr/servers/nginx/logs/error.log
+
+
+====================================================================================================================================
+
+
+（3）工程化的nginx+lua项目结构
+
+    mkdir -p /usr/hello
+	mkdir -p /usr/hello/lua/
+
+* 项目工程目录结构，统一放在/usr/hello目录下：
+
+	hello
+		hello.conf     
+		lua              
+		  hello.lua
+		lualib            
+		  *.lua
+		  *.so
+
+
+* vi /usr/servers/nginx/conf/nginx.conf
+
+	worker_processes  2;  
+
+	error_log  logs/error.log;  
+
+	events {  
+		worker_connections  1024;  
+	}  
+
+	http {  
+		include       mime.types;  
+		default_type  text/html;  
+	  
+		lua_package_path "/usr/hello/lualib/?.lua;;";  
+		lua_package_cpath "/usr/hello/lualib/?.so;;"; 
+		include /usr/hello/hello.conf;  
+	}  
+
+
+
+* vi /usr/hello/hello.conf
+
+	server {  
+		listen       80;  
+		server_name  _;  
+	  
+		location /hello {  
+			default_type 'text/html'; 
+#在 nginx.conf 文件的 server {.. ...} 中加入 lua_code_cache off; 可以方便调试lua脚本，修改lua脚本之后，不需要 reload nginx.			
+#			lua_code_cache off;  
+			content_by_lua_file /usr/hello/lua/hello.lua;  
+		}  
+	}  
+
+	
+	
+* vi /usr/hello/lua/hello.lua
+
+ngx.say("hello world"); 
+
+
+* 复制lib依赖：cp -r /usr/servers/lualib /usr/hello/
+
+* 重新nginx加载配置
+
+/usr/servers/nginx/sbin/nginx -s reload  
+
+
+* 访问：http://192.168.1.105/hello
+
+2、如法炮制，在另外两台机器上，也用OpenResty部署一个nginx
+
+
+====================================================================================================================================
+

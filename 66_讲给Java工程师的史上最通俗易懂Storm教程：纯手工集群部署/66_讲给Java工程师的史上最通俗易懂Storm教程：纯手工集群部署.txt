@@ -1,0 +1,81 @@
+storm集群部署，怎么将storm的拓扑扔到storm集群上去跑
+
+六、部署一个storm集群
+
+（1）安装Java 7和Python 2.6.6
+
+		查看Java版本：java -version
+		查看Java版本：python
+		
+==================================================================================================================================
+
+（2）下载storm安装包，解压缩，重命名，配置环境变量
+
+安装到 /usr/local/目录下，解压改名为 storm
+
+vi ~/.bashrc
+
+export STORM_HOME=/usr/local/storm
+export PATH=$STORM_HOME/bin
+
+刷新配置：
+source ~/.bashrc
+
+==================================================================================================================================
+
+（3）修改storm配置文件
+
+vim conf/storm.yaml
+
+storm.zookeeper.servers:
+  - "192.168.1.105"
+  - "192.168.1.106"
+  - "192.168.1.107"
+
+storm.local.dir: "/var/storm"
+
+nimbus.seeds: ["111.222.333.44"]
+
+slots.ports，指定每个机器上可以启动多少个worker，一个端口号代表一个worker
+
+supervisor.slots.ports:
+    - 6700
+    - 6701
+    - 6702
+    - 6703
+
+将 ~/.bashrc 配置文件scp到其他两台机器：
+
+scp  ~/.bashrc root@eshop-cache02:~/
+scp  ~/.bashrc root@eshop-cache03:~/
+
+scp -r /usr/local/storm root@eshop-cache02:/usr/local
+scp -r /usr/local/storm root@eshop-cache03:/usr/local
+	
+三台机器同时创建 /var/storm 目录 	
+mkdir -p /var/storm
+刷新配置：
+source ~/.bashrc
+==================================================================================================================================
+
+(4)启动storm集群和ui界面
+
+一个节点启动nimbus，storm nimbus >/dev/null 2>&1 &
+
+一个节点启动UI，storm ui >/dev/null 2>&1 &
+
+三个节点启动supervisor，storm supervisor >/dev/null 2>&1 &
+
+三个节点启动logviewer，storm logviewer >/dev/null 2>&1 &
+
+==================================================================================================================================
+
+（5）访问一下ui界面，8080端口
+
+192.168.1.105:8080
+
+
+
+先启动 nimbus，否则启动ui页面访问时候会报如下错误：
+
+org.apache.storm.utils.NimbusLeaderNotFoundException: Could not find leader nimbus from seed hosts ["192.168.1.105"]. Did you specify a valid list of nimbus hosts for config nimbus.seeds?

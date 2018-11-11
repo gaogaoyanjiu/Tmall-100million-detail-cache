@@ -1,0 +1,23 @@
+
+七、提交作业到storm集群来运行
+
+（1）将eclipse中的工程，进行打包
+
+    将jar上传到linux 的/usr/local目录
+
+（2）提交作业到storm集群
+
+storm jar path/to/allmycode.jar org.me.MyTopology arg1 arg2 arg3
+
+如：
+
+storm jar /usr/local/storm-helloworld-0.0.1-SNAPSHOT.jar com.roncoo.eshop.storm.WordCountTopology
+
+（3）在storm ui上观察storm作业的运行
+
+（4）kill掉某个storm作业
+
+storm kill topology-name
+
+如：
+storm kill WordCountTopology

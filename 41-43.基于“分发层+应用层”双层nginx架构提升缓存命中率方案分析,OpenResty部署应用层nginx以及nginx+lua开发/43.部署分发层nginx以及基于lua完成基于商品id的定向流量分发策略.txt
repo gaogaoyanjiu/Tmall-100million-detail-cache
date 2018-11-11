@@ -1,0 +1,105 @@
+
+大家可以自己按照上一讲讲解的内容，基于OpenResty在另外两台机器上都部署一下nginx+lua的开发环境
+
+我已经在eshop-cache02和eshop-cache03上都部署好了
+
+我这边的话呢，是打算用eshop-cache01和eshop-cache02作为应用层nginx服务器，用eshop-cache03作为分发层nginx
+
+在eshop-cache03，也就是分发层nginx中，编写lua脚本，完成基于商品id的流量分发策略
+
+当然了，我们这里主要会简化策略，简化业务逻辑，实际上在你的公司中，你可以随意根据自己的业务逻辑和场景，去制定自己的流量分发策略
+
+1、获取请求参数，比如productId
+2、对productId进行hash
+3、hash值对应用服务器数量取模，获取到一个应用服务器
+4、利用http发送请求到应用层nginx
+5、获取响应后返回
+
+这个就是基于商品id的定向流量分发的策略，lua脚本来编写和实现
+
+我们作为一个流量分发的nginx，会发送http请求到后端的应用nginx上面去，所以要先引入lua http lib包
+
+cd /usr/hello/lualib/resty/  
+wget https://raw.githubusercontent.com/pintsized/lua-resty-http/master/lib/resty/http_headers.lua  
+wget https://raw.githubusercontent.com/pintsized/lua-resty-http/master/lib/resty/http.lua 
+
+代码：
+
+local uri_args = ngx.req.get_uri_args()
+local productId = uri_args["productId"]
+
+local host = {"192.168.1.105", "192.168.1.106"}
+local hash = ngx.crc32_long(productId)
+hash = (hash % 2) + 1  
+backend = "http://"..host[hash]
+
+local method = uri_args["method"]
+local requestBody = "/"..method.."?productId="..productId
+
+local http = require("resty.http")  
+local httpc = http.new()  
+
+local resp, err = httpc:request_uri(backend, {  
+    method = "GET",  
+    path = requestBody
+})
+
+if not resp then  
+    ngx.say("request error :", err)  
+    return  
+end
+
+ngx.say(resp.body)  
+  
+httpc:close() 
+
+/usr/servers/nginx/sbin/nginx -s reload
+
+
+* 查看异常日志
+
+ tail -f /usr/servers/nginx/logs/error.log
+ 
+ 
+基于商品id的定向流量分发策略的lua脚本就开发完了，而且也测试过了
+
+访问测试：
+
+http://192.168.1.107/hello?requestPath=hello&productId=1
+
+http://192.168.1.107/hello?method=hello&productId=1
+
+我们就可以看到，如果你请求的是固定的某一个商品，那么就一定会将流量打到固定的一个应用nginx上面去
+
+
+====================================================================================================================================
+
+
+OpenResty 最佳实践
+https://moonbingbing.gitbooks.io/openresty-best-practices/content/
+
+
+安装Nginx+Lua+OpenResty开发环境配置全过程实例
+https://www.cnblogs.com/zdz8207/p/Nginx-Lua-OpenResty.html
+
+https://www.nginx.com/resources/wiki/extending/api/http/?highlight=http
+
+《亿级流量网站架构核心技术》~
+http://jinnianshilongnian.iteye.com/blog/2188538
+
+
+
+
+
+local http = require("resty.http")
+local httpc = http.new()
+
+local resp, err = httpc:request_uri("http://192.168.1.105",{
+  method = "GET",
+  path = "/hello?productId=1"
+})
+
+if not resp then
+  ngx.say("request error: ", err)
+  return
+end
