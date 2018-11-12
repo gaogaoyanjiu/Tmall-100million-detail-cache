@@ -1,0 +1,94 @@
+
+hystrix，高级的技术，request collapser，请求合并技术，collapser折叠
+
+优化过一个批量查询的接口了，request cache来做优化，可能有相同的商品就可以直接取用缓存了
+
+多个商品，需要发送多次网络请求，调用多次接口，才能拿到结果
+
+可以使用HystrixCollapser将多个HystrixCommand合并到一起，多个command放在一个command里面去执行，发送一次网络请求，就拉取到多条数据
+
+用请求合并技术，将多个请求合并起来，可以减少高并发访问下需要使用的线程数量以及网络连接数量，这都是hystrix自动进行的
+
+其实对于高并发的访问来说，是可以提升性能的
+
+请求合并有很多种级别
+
+（1）global context，tomcat所有调用线程，对一个依赖服务的任何一个command调用都可以被合并在一起，hystrix就传递一个HystrixRequestContext
+
+（2）user request context，tomcat内某一个调用线程，将某一个tomcat线程对某个依赖服务的多个command调用合并在一起
+
+（3）object modeling，基于对象的请求合并，如果有几百个对象，遍历后依次调用每个对象的某个方法，可能导致发起几百次网络请求，基于hystrix可以自动将对多个对象模型的调用合并到一起
+
+请求合并技术的开销有多大
+
+使用请求合并技术的开销就是导致延迟大幅度增加，因为需要一定的时间将多个请求合并起来
+
+发送过来10个请求，每个请求本来大概是2ms可以返回，要把10个请求合并在一个command内，统一一起执行，先后等待一下，5ms
+
+所以说，要考量一下，使用请求合并技术是否合适，如果一个请求本来耗费的时间就比较长，那么进行请求合并，增加一些延迟影响并不大
+
+
+请求合并技术，不是针对那种访问延时特别低的请求的，比如说你的访问延时本身就比较高，20ms，10个请求合并在一起，25ms，这种情况下就还好
+
+好处在哪里，大幅度削减你的线程池的资源耗费，线程池，10个线程，一秒钟可以执行10个请求，合并在一起，1个线程执行10个请求，10个线程就可以执行100个请求
+
+增加你的吞吐量
+
+减少你对后端服务访问时的网络资源的开销，10个请求，10个command，10次网络请求的开销，1次网络请求的开销了
+
+
+每个请求就2ms，batch，8~10ms，延迟增加了4~5倍
+
+每个请求本来就30ms~50ms，batch，35ms~55ms，延迟增加不太明显
+
+
+将多个command请求合并到一个command中执行
+
+请求合并时，可以设置一个batch size，以及elapsed time（控制什么时候触发合并后的command执行）
+
+有两种合并模式，一种是request scope，另一种是global scope，默认是rquest scope，在collapser构造的时候指定scope模式
+
+request scope的batch收集是建立在一个request context内的，而global scope的batch收集是横跨多个request context的
+
+所以对于global context来说，必须确保能在一个command内处理多个requeset context的请求
+
+在netflix，是只用request scope请求合并的，因为默认是用唯一一个request context包含所有的command，所以要做合并，肯定就是request scope
+
+一般请求合并技术，对于那种访问同一个资源的command，但是参数不同，是很有效的
+
+
+批量查询，HystrixObservableCommand，HystrixCommand+request cache，都是每个商品发起一次网络请求
+
+一个批量的商品过来以后，我们还是多个command的方式去执行，request collapser+request cache，相同的商品还是就查询一次，不同的商品合并到一起通过一个网络请求得到结果
+
+
+
+
+timeout问题解释：开发机上，特别慢，第一次请求的时候，几百毫秒，默认的timeout时长比较短
+
+第二次的时候，访问的速度会快很多，就不会超时了
+
+反应在系统上，第一次启动的时候，会有个别的超时，但是后面就好了，手动将timeout时长设置的大一些
+
+
+
+（1）maxRequestsInBatch
+
+控制一个Batch中最多允许多少个request被合并，然后才会触发一个batch的执行
+
+默认值是无限大，就是不依靠这个数量来触发执行，而是依靠时间
+
+HystrixCollapserProperties.Setter()
+   .withMaxRequestsInBatch(int value)
+
+（2）timerDelayInMilliseconds
+
+控制一个batch创建之后，多长时间以后就自动触发batch的执行，默认是10毫秒
+
+HystrixCollapserProperties.Setter()
+   .withTimerDelayInMilliseconds(int value)
+
+super(Setter.withCollapserKey(HystrixCollapserKey.Factory.asKey("GetProductInfosCollapser"))
+				.andCollapserPropertiesDefaults(HystrixCollapserProperties.Setter()
+						   .withMaxRequestsInBatch(100)
+						   .withTimerDelayInMilliseconds(20))); 

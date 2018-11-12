@@ -1,0 +1,80 @@
+
+1、安装metrics stream
+
+<dependency>
+    <groupId>com.netflix.hystrix</groupId>
+    <artifactId>hystrix-metrics-event-stream</artifactId>
+    <version>1.4.10</version>
+</dependency>
+
+@Bean
+public ServletRegistrationBean indexServletRegistration() {
+    ServletRegistrationBean registration = new ServletRegistrationBean(new HystrixMetricsStreamServlet());
+    registration.addUrlMappings("/hystrix.stream");
+    return registration;
+}
+
+2、安装gradle
+
+类似于maven，一种java里面的打包和构建的工具，hystrix是用gradle去管理打包和构建的
+
+配置环境变量，GRADLE_HOME
+配置PATH，%GRADLE_HOME%/bin
+
+gradle -v
+
+3、下载tomcat7
+
+解压缩
+
+4、下载hystrix-dashboard的war包
+
+cp hystrix-dashboard-*.war apache-tomcat-7.*/webapps/hystrix-dashboard.war
+
+5、下载turbin
+
+下载并解压缩
+
+cp turbine-web/build/libs/turbine-web-*.war ./apache-tomcat-7.*/webapps/turbine.war
+
+在/WEB-INF/classes下放置配置文件
+
+config.properties
+
+turbine.ConfigPropertyBasedDiscovery.default.instances=localhost
+turbine.instanceUrlSuffix=:8081/hystrix.stream
+
+turbin是用来监控一个集群的，可以将一个集群的所有机器都配置在这里
+
+6、启动我们的服务
+
+7、启动tomcat中的hystrix dashboard和turbin
+
+localhost:8080/hystrix-dashboard
+
+http://localhost:8081/hystrix.stream，监控单个机器
+http://localhost:8080/turbine/turbine.stream，监控整个集群
+
+8、发送几个请求，看看效果
+
+9、hystrix dashboard
+
+hystrix的dashboard可以支持实时监控metric
+
+netflix开始用这个dashboard的时候，大幅度优化了工程运维的操作，帮助节约了恢复系统的时间。大多数生产系统的故障持续时间变得很短，而且影响幅度小了很多，主要是因为hystrix dashborad提供了可视化的监控。
+
+截图说明，dashboard上的指标都是什么？
+
+圆圈的颜色和大小代表了健康状况以及流量，折线代表了最近2分钟的请求流量
+
+集群中的机器数量，请求延时的中位数以及平均值
+
+最近10秒内的异常请求比例，请求QPS，每台机器的QPS，以及整个集群的QPS
+
+断路器的状态
+
+最近一分钟的请求延时百分比，TP90，TP99，TP99.5
+
+几个有颜色的数字，代表了最近10秒钟的统计，以1秒钟为粒度
+
+成功的请求数量，绿颜色的数字; 短路的请求数量，蓝色的数字; timeout超时的请求数量，黄色的数字; 线程池reject的请求数量，紫色的数字; 请求失败，抛出异常的请求数量，红色的数字

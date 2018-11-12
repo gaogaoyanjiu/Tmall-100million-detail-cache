@@ -1,42 +1,27 @@
-server {
-	listen    80;
+local uri_args = ngx.req.get_uri_args()
+local productId = uri_args["productId"]
 
-	location /hello {
-		content_by_lua_block {
-			ngx.req.read_body()
-			local args, err = ngx.req.get_uri_args()
+local host = {"192.168.1.105", "192.168.1.106"}
+local hash = ngx.crc32_long(productId)
+hash = (hash % 2) + 1  
+backend = "http://"..host[hash]
 
-			local http = require "resty.http"   -- ①
-			local httpc = http.new()
-			local res, err = httpc:request_uri( -- ②
-				"http://127.0.0.1:81/spe_md5",
-					{
-					method = "POST",
-					body = args.data,
-				  }
-			)
+local method = uri_args["requestPath"]
+local requestBody = "/"..method.."?productId="..productId
 
-			if 200 ~= res.status then
-				ngx.exit(res.status)
-			end
+local http = require("resty.http")  
+local httpc = http.new()  
 
-			if args.key == res.body then
-				ngx.say("valid request")
-			else
-				ngx.say("invalid request")
-			end
-		}
-	}
-}
+local resp, err = httpc:request_uri(backend, {  
+    method = "GET",  
+    path = requestBody
+})
 
-server {
-	listen    81;
+if not resp then  
+    ngx.say("request error :", err)  
+    return  
+end
 
-	location /spe_md5 {
-		content_by_lua_block {
-			ngx.req.read_body()
-			local data = ngx.req.get_body_data()
-			ngx.print(ngx.md5(data .. "*&^%$#$^&kjtrKUYG"))
-		}
-	}
-}
+ngx.say(resp.body)  
+  
+httpc:close() 

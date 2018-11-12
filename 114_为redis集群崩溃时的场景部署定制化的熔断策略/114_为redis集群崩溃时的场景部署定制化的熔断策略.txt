@@ -1,0 +1,75 @@
+
+缓存雪崩的解决方案，事中，发生缓存雪崩的时候，解决方案
+
+redis集群崩溃的时候，会怎么样？
+
+（1）首先大量的等待，超时，报错
+（2）如果是短时间内报错，会直接走fallback降级，直接返回null
+（3）超时控制，你应该判断说redis访问超过了多长时间，就直接给timeout掉了
+
+不推荐说用默认的值，一般不太精准，redis的访问你首先自己先统计一下访问时长的百分比，hystrix dashboard，TP90 TP95 TP99
+
+一般来说，redis访问，假设说TP99在100ms，那么此时，你的timeout稍微多给一些，100ms
+
+
+1、timeout超时控制
+
+HystrixCommandProperties.Setter()
+   .withExecutionTimeoutInMilliseconds(int value)
+
+意义在于哪里，一旦说redis出现了大面积的故障，此时肯定是访问的时候大量的超过100ms，大量的在等待和超时
+
+就可以确保说，大量的请求不会hang住过长的时间，比如说hang住个1s，500ms，100ms直接就报timeout，走fallback降级了
+
+2、熔断策略
+
+（1）circuitBreaker.requestVolumeThreshold
+
+设置一个rolling window，滑动窗口中，最少要有多少个请求时，才触发开启短路
+
+举例来说，如果设置为20（默认值），那么在一个10秒的滑动窗口内，如果只有19个请求，即使这19个请求都是异常的，也是不会触发开启短路器的
+
+HystrixCommandProperties.Setter()
+   .withCircuitBreakerRequestVolumeThreshold(int value)
+
+我们应该根据我们自己的平时的访问流量去设置，而不是用默认值，比如说，我们认为平时一般的时候，流量也可以在每秒在QPS 100，10秒的滑动窗口就是1000
+
+一般来说，你可以设置这样的一个值，根据你自己的系统的流量去设置
+
+假如说，你设置的太少了，或者太多了，都不太合适
+
+举个例子，你设置一个20，结果在晚上最低峰的时候，刚好是30，可能晚上的时候因为访问不频繁，大量的找不到缓存，可能超时频繁了一些，结果直接就给短路了
+
+（2）circuitBreaker.errorThresholdPercentage
+
+设置异常请求量的百分比，当异常请求达到这个百分比时，就触发打开短路器，默认是50，也就是50%
+
+HystrixCommandProperties.Setter()
+   .withCircuitBreakerErrorThresholdPercentage(int value)
+
+我们最好还是自己定制，自己设置，你说如果是要50%的时候才短路的话，会有什么情况呢，10%短路，也不太靠谱，90%异常，才短路
+
+我觉得这个值可以稍微高一些，redis集群彻底崩溃，那么基本上就是所有的请求，100%都会异常，60%，70%
+
+也有可能偶然出现网络的抖动，导致比如说就这10秒钟，访问延时高了一些，其实可能并不需要立即就短路，可能下10秒马上就恢复了
+
+
+金融支付类的接口，可能这个比例就会设置的很低，因为对异常系统必须要很敏感，可能就是10%异常了，就直接短路了，不让继续访问了
+
+比如金融支付类的接口，正常来说，是很重要的，而且必须是很稳定，我们不能容忍任何的延迟或者是报错
+
+一旦支付类的接口，有10%的异常的话，我们基本就可以认为这个接口已经出问题了，再继续访问的话，也许访问的就是有问题的接口，可能造成资金的错乱，等给公司造成损失
+
+熔断，不让访问了，走降级策略
+
+就是对整个系统，是一个安全性的保障
+
+（3）circuitBreaker.sleepWindowInMilliseconds
+
+设置在短路之后，需要在多长时间内直接reject请求，然后在这段时间之后，再重新导holf-open状态，尝试允许请求通过以及自动恢复，默认值是5000毫秒
+
+HystrixCommandProperties.Setter()
+   .withCircuitBreakerSleepWindowInMilliseconds(int value)
+
+如果redis集群崩溃了，会在5s内就直接恢复，1分钟
+

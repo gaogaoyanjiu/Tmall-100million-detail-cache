@@ -1,0 +1,64 @@
+
+可能会出现一种情况，比如说我们的某个依赖，在高峰期，需要耗费100个线程，但是在那个时间段，刚好其他的依赖的线程池其实就维持一两个就可以了
+
+但是，如果我们都是设置死的，每个服务就给10个线程，那就很坑，可能就导致有的服务在高峰期需要更多的资源，但是没资源了，导致很多的reject
+
+但是其他的服务，每秒钟就易一两个请求，结果也占用了10个线程，占着茅坑不拉屎
+
+做成弹性的线程资源调度的模式
+
+刚开始的时候，每个依赖服务都是给1个线程，3个线程，但是我们允许说，如果你的某个线程池突然需要大量的线程，最多可以到100个线程
+
+如果你使用了100个线程，高峰期过去了，自动将空闲的线程给释放掉
+
+（1）coreSize
+
+设置线程池的大小，默认是10
+
+HystrixThreadPoolProperties.Setter()
+   .withCoreSize(int value)
+
+（2）maximumSize
+
+设置线程池的最大大小，只有在设置allowMaximumSizeToDivergeFromCoreSize的时候才能生效
+
+默认是10
+
+HystrixThreadPoolProperties.Setter()
+   .withMaximumSize(int value)
+
+（5）keepAliveTimeMinutes
+
+设置保持存活的时间，单位是分钟，默认是1
+
+如果设置allowMaximumSizeToDivergeFromCoreSize为true，那么coreSize就不等于maxSize，此时线程池大小是可以动态调整的，可以获取新的线程，也可以释放一些线程
+
+如果coreSize < maxSize，那么这个参数就设置了一个线程多长时间空闲之后，就会被释放掉
+
+HystrixThreadPoolProperties.Setter()
+   .withKeepAliveTimeMinutes(int value)
+
+（6）allowMaximumSizeToDivergeFromCoreSize
+
+允许线程池大小自动动态调整，设置为true之后，maxSize就生效了，此时如果一开始是coreSize个线程，随着并发量上来，那么就会自动获取新的线程，但是如果线程在keepAliveTimeMinutes内空闲，就会被自动释放掉
+
+默认是fales
+
+HystrixThreadPoolProperties.Setter()
+   .withAllowMaximumSizeToDivergeFromCoreSize(boolean value)
+
+
+生产环境中，这块怎么玩儿的
+
+也是根据你的服务的实际的运行的情况切看的，比如说你发现某个服务，平时3个并发QPS就够了，高峰期可能要到30个
+
+那么你就可以给设置弹性的资源调度
+
+
+因为你可能一个服务会有多个线程池，你要计算好，每个线程池的最大的大小加起来不能过大，30个依赖，30个线程池，每个线程池最大给到30,900个线程，很坑的
+
+
+还有一种模式，就是说让多个依赖服务共享一个线程池，我们不推荐，多个依赖服务就做不到资源隔离，互相之间会影响的
+
+1，coreSize
+

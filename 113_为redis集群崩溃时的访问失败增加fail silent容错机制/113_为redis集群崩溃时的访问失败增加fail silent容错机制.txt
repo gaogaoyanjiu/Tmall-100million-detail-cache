@@ -1,0 +1,18 @@
+
+上一节课，我们已经通过hystrix command对redis的访问进行了资源隔离
+
+资源隔离，避免说redis访问频繁失败，或者频繁超时的时候，耗尽大量的tomcat容器的资源去hang在redis的访问上
+
+限定只有一部分线程资源可以用来访问redis
+
+你是不是说，如果redis集群彻底崩溃了，这个时候，可能command对redis的访问大量的报错和timeout超时，熔断（短路）
+
+降级机制，fallback
+
+fail silent模式，fallback里面直接返回一个空值，比如一个null，最简单了
+
+在外面调用redis的代码（CacheService类），是感知不到redis的访问异常的，只要你把timeout、熔断、熔断恢复、降级，都做好了
+
+可能会出现的情况是，当redis集群崩溃的时候，CacheService获取到的是大量的null空值
+
+根据这个null空值，我们还可以去做多级缓存的降级访问，nginx本地缓存，redis分布式集群缓存，ehcache本地缓存，CacheController

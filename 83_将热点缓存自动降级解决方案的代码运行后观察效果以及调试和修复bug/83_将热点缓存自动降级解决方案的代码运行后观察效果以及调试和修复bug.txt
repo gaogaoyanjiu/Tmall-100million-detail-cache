@@ -1,0 +1,12 @@
+
+1、storm中打印日志
+
+2、重新部署storm拓扑
+
+3、nginx中修改html模板
+
+4、手动构造出一个热点缓存出来，看热点缓存能否进行负载均衡
+
+5、手动让热点缓存消失，看热点缓存能否自动小时，重新进行hash分发
+
+http://192.168.31.187/hot?productId=15&productInfo={"id":15,"name":"iphone7手机","price":5599.0,"pictureList":"a.jpg,b.jpg","specification":"iphone7的规格","service":"iphone7的售后服务","color":"红色,白色,黑色","size":"5.5","shopId":1,"modifiedTime":"2017-01-01 12:01:00"}
